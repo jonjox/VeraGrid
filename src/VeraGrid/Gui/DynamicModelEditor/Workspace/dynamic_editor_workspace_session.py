@@ -10,18 +10,16 @@ from typing import List, Dict, Tuple, TYPE_CHECKING
 from PySide6 import QtCore, QtWidgets
 
 from VeraGrid.Gui.DynamicModelEditor.Events.dynamic_events_page import DynamicEventsPage
-from VeraGrid.Gui.DynamicModelEditor.Events.dynamic_events_support import collect_dynamic_events_page_parameters
 from VeraGrid.Gui.DynamicModelEditor.Editor.dynamic_block_editor import DynamicBlockEditorGUI
+from VeraGrid.Gui.DynamicModelEditor.Plots.dynamic_plots_page import DynamicPlotsPage
+from VeraGrid.Gui.DynamicModelEditor.ModelComparison.dynamic_model_comparison_page import DynamicModelComparisonPage
 from VeraGrid.Gui.DynamicModelEditor.Workspace.Tabs.dynamic_editor_tab import DynamicEditorTab
 from VeraGrid.Gui.DynamicModelEditor.Workspace.dynamic_editor_entries import DynamicEditorEntry
 from VeraGrid.Gui.DynamicModelEditor.Workspace.dynamic_editor_entries import build_dynamic_editor_entry
-from VeraGrid.Gui.DynamicModelEditor.Workspace.dynamic_editor_entries import entry_supports_dynamic_events
 from VeraGrid.Gui.DynamicModelEditor.Workspace.dynamic_editor_entries import get_block_for_entry
 from VeraGrid.Gui.DynamicModelEditor.Workspace.dynamic_editor_entries import get_templates_for_entry
-from VeraGridEngine.Devices.Parents.editable_device import EditableDevice
 from VeraGridEngine.Devices.multi_circuit import MultiCircuit
 from VeraGridEngine.Devices.types import ALL_DEV_TYPES
-from VeraGridEngine.Utils.Symbolic.symbolic import Var
 from VeraGridEngine.enumerations import DynamicSimulationMode, DynEditorGraphicsModes
 
 if TYPE_CHECKING:
@@ -29,7 +27,7 @@ if TYPE_CHECKING:
 
 
 def _get_page_entry(
-        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | None,
+        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage | None,
 ) -> DynamicEditorEntry | None:
     """
     Return the cached dynamic-editor entry stored on one page widget.
@@ -43,7 +41,7 @@ def _get_page_entry(
 
 
 def get_page_mode(
-        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | None,
+        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage | None,
 ) -> DynamicSimulationMode | None:
     """
     Return the cached dynamic-editor mode stored on one page widget.
@@ -61,6 +59,8 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
     Shared state for one family of detachable workspace windows.
     """
 
+    dynamicPlotsChanged = QtCore.Signal(object, object)
+
     def __init__(self) -> None:
         """
         Initialize the shared session state for one workspace family.
@@ -71,13 +71,15 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         super().__init__()
         self._open_workspaces: List[DynamicEditorWorkspaceWindow] = list()
         self._session_pages: Dict[str, DynamicEditorTab] = dict()
-        self._event_pages: List[DynamicEventsPage] = list()
+        self._event_pages: Dict[tuple[int, DynamicSimulationMode], DynamicEventsPage] = dict()
+        self._plot_pages: Dict[tuple[int, DynamicSimulationMode], DynamicPlotsPage] = dict()
+        self._comparison_pages: Dict[tuple[int, DynamicSimulationMode], DynamicModelComparisonPage] = dict()
         self._last_mode_by_key_base: Dict[str, DynamicSimulationMode] = dict()
         self._last_active_workspace: DynamicEditorWorkspaceWindow | None = None
-        self._pending_drag_page: DynamicEditorTab | DynamicBlockEditorGUI | DynamicEventsPage | None = None
+        self._pending_drag_page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage | None = None
         self._pending_drag_workspace: DynamicEditorWorkspaceWindow | None = None
         self._retained_workspaces: List[DynamicEditorWorkspaceWindow] = list()
-        self._retained_pages: List[DynamicEditorTab | DynamicBlockEditorGUI | DynamicEventsPage] = list()
+        self._retained_pages: List[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage] = list()
         self.current_theme: DynEditorGraphicsModes = DynEditorGraphicsModes.DARK
 
     def register_workspace(self, workspace: "DynamicEditorWorkspaceWindow") -> None:
@@ -155,6 +157,8 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         self._open_workspaces.clear()
         self._session_pages.clear()
         self._event_pages.clear()
+        self._plot_pages.clear()
+        self._comparison_pages.clear()
         self._last_mode_by_key_base.clear()
         self._last_active_workspace = None
         self._pending_drag_page = None
@@ -172,7 +176,7 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def can_close_pages(
             self,
-            pages: List[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage],
+            pages: List[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage],
             parent: QtWidgets.QWidget,
     ) -> bool:
         """Validate a page-closing operation before any page is destroyed.
@@ -184,10 +188,10 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         :param parent: Widget that owns any save or discard prompt.
         :return: Whether the complete closing operation may proceed.
         """
-        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage
+        page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage
         for page in pages:
-            if isinstance(page, DynamicEventsPage):
-                # Event pages edit circuit assets immediately and therefore have no close guard.
+            if isinstance(page, (DynamicEventsPage, DynamicPlotsPage)):
+                # Event and plot pages edit circuit assets immediately and therefore have no close guard.
                 pass
             else:
                 if not bool(page.can_close_editor(parent)):
@@ -211,12 +215,12 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         # covers both the primary window and every detached editor window.
         workspaces_to_close: List[DynamicEditorWorkspaceWindow] = list(self.get_open_workspaces())
         workspace_to_check: DynamicEditorWorkspaceWindow
-        pages_to_check: List[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage] = list()
+        pages_to_check: List[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage] = list()
 
         # Validate the complete operation first. Closing during this loop would
         # make cancellation in a later detached window only partially effective.
         for workspace_to_check in workspaces_to_close:
-            page_to_check: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage
+            page_to_check: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage
             for page_to_check in workspace_to_check.pages_iter():
                 pages_to_check.append(page_to_check)
 
@@ -236,6 +240,8 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         self._open_workspaces.clear()
         self._session_pages.clear()
         self._event_pages.clear()
+        self._plot_pages.clear()
+        self._comparison_pages.clear()
         self._last_mode_by_key_base.clear()
         self._last_active_workspace = None
         self._pending_drag_page = None
@@ -246,7 +252,7 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def workspace_for_page(
             self,
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> "DynamicEditorWorkspaceWindow | None":
         """
         Locate the workspace that currently owns one editor page.
@@ -265,33 +271,32 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def note_page_activated(
             self,
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> None:
-        """Record activation and lazily refresh event/model consistency.
+        """Record activation and lazily refresh event and plot projections.
 
         Event reconciliation deliberately happens here, not in the model save
         path. Consequently, saving a model cannot mutate or dirty a hidden
         events tab; the events are regenerated only when the user accesses it.
-
         :param page: Newly activated page.
         :return: None.
         """
-        entry = _get_page_entry(page)
-        mode = get_page_mode(page)
-        workspace = self.workspace_for_page(page)
+        entry: DynamicEditorEntry | None = _get_page_entry(page)
+        mode: DynamicSimulationMode | None = get_page_mode(page)
+        workspace: DynamicEditorWorkspaceWindow | None = self.workspace_for_page(page)
         if entry is not None and mode is not None:
             self._last_mode_by_key_base[entry.key_base] = mode
         if workspace is not None:
             self._last_active_workspace = workspace
 
-        if isinstance(page, DynamicEventsPage):
+        if isinstance(page, (DynamicEventsPage, DynamicPlotsPage)):
             page.refresh_from_saved_model()
         else:
             pass
 
     @staticmethod
     def build_page_tab_title(
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> str:
         """
         Build the tab title shown for one page, including dirty-state marker.
@@ -306,7 +311,7 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def refresh_open_page_title(
             self,
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> None:
         """
         Refresh the tab title for one open page if its workspace is still alive.
@@ -320,7 +325,7 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def connect_page_signals(
             self,
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> None:
         """
         Connect long-lived page signals needed by the workspace session.
@@ -329,6 +334,10 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         :return: None.
         """
         page.dirtyStateChanged.connect(self._on_page_dirty_state_changed)
+        if isinstance(page, DynamicEditorTab):
+            page.dynamicPlotDefinitionsChanged.connect(self.notify_dynamic_plots_changed)
+        else:
+            pass
 
     def _on_page_dirty_state_changed(self, _dirty: bool) -> None:
         """
@@ -339,15 +348,15 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
         """
         page: QtCore.QObject | None = self.sender()
         if isinstance(page, QtWidgets.QWidget):
-            workspace_page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | None = None
-            if isinstance(page, (DynamicBlockEditorGUI, DynamicEditorTab, DynamicEventsPage)):
+            workspace_page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage | None = None
+            if isinstance(page, (DynamicBlockEditorGUI, DynamicEditorTab, DynamicEventsPage, DynamicPlotsPage, DynamicModelComparisonPage)):
                 workspace_page = page
             else:
                 pass
             if workspace_page is not None:
                 if isinstance(workspace_page, DynamicEventsPage):
                     event_page: DynamicEventsPage
-                    for event_page in self._event_pages:
+                    for event_page in self._event_pages.values():
                         self.refresh_open_page_title(event_page)
                 else:
                     self.refresh_open_page_title(workspace_page)
@@ -457,62 +466,38 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def create_events_page(
             self,
-            entry: DynamicEditorEntry,
+            circuit: MultiCircuit,
             mode: DynamicSimulationMode,
-    ) -> DynamicEventsPage | None:
-        """Create one events page backed by the shared circuit transaction.
+    ) -> DynamicEventsPage:
+        """Create one circuit-wide events page.
 
-        :param entry: Device entry whose events will be displayed.
+        :param circuit: Circuit whose complete event family is edited.
         :param mode: RMS or EMT event family to open.
-        :return: New events page, or ``None`` for non-device entries.
+        :return: New global events page.
         """
-        if not isinstance(entry.api_object, EditableDevice) or not entry_supports_dynamic_events(entry):
-            return None
-        else:
-            pass
-        parameters: list[Var]
-        mode_parameter_uids: set[int]
-        model_is_empty: bool
-        parameters, mode_parameter_uids, model_is_empty = collect_dynamic_events_page_parameters(
-            entry=entry,
-            mode=mode,
-        )
         page: DynamicEventsPage = DynamicEventsPage(
-            entry=entry,
-            device=entry.api_object,
+            circuit=circuit,
             mode=mode,
-            parameters=parameters,
-            mode_parameter_uids=mode_parameter_uids,
-            model_is_empty=model_is_empty,
         )
         self.connect_page_signals(page=page)
         self._retained_pages.append(page)
         return page
 
-    def open_events_entry(
+    def open_events_page(
             self,
-            entry: DynamicEditorEntry,
+            circuit: MultiCircuit,
             mode: DynamicSimulationMode,
             target_workspace: "DynamicEditorWorkspaceWindow | None" = None,
-    ) -> DynamicEventsPage | None:
-        """Open or focus one unique device and mode events page.
+    ) -> DynamicEventsPage:
+        """Open or focus the unique circuit-wide page for one event family.
 
-        :param entry: Device entry whose events will be edited.
+        :param circuit: Circuit whose complete events are edited.
         :param mode: RMS or EMT event family to open.
         :param target_workspace: Preferred workspace receiving a new page.
-        :return: Open events page, or ``None`` when unsupported.
+        :return: Open global events page.
         """
-        if mode not in entry.available_modes:
-            return None
-        else:
-            pass
-        existing_page: DynamicEventsPage | None = None
-        candidate_page: DynamicEventsPage
-        for candidate_page in self._event_pages:
-            if candidate_page.entry.key_base == entry.key_base and candidate_page.mode == mode:
-                existing_page = candidate_page
-            else:
-                pass
+        page_key: tuple[int, DynamicSimulationMode] = (id(circuit), mode)
+        existing_page: DynamicEventsPage | None = self._event_pages.get(page_key, None)
         if existing_page is not None:
             workspace: DynamicEditorWorkspaceWindow | None = self.workspace_for_page(existing_page)
             if workspace is None:
@@ -533,40 +518,149 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
             raise RuntimeError("DynamicEditorWorkspaceSession requires an existing workspace")
         else:
             pass
-        page: DynamicEventsPage | None = self.create_events_page(entry=entry, mode=mode)
-        if page is None:
-            return None
-        else:
-            pass
-        self._event_pages.append(page)
+        page: DynamicEventsPage = self.create_events_page(circuit=circuit, mode=mode)
+        self._event_pages[page_key] = page
         workspace.add_editor_page(page, self.build_page_tab_title(page), activate=True)
         self._last_active_workspace = workspace
         return page
 
-    def open_dynamic_events_for(
+    def create_plots_page(self,
+                          circuit: MultiCircuit,
+                          mode: DynamicSimulationMode) -> DynamicPlotsPage:
+        """Create one circuit-wide persistent plots editor page.
+
+        :param circuit: Circuit that owns the plot definitions.
+        :param mode: RMS or EMT plot family.
+        :return: Newly created global plots page.
+        """
+        page: DynamicPlotsPage = DynamicPlotsPage(
+            circuit=circuit,
+            mode=mode,
+            session=self,
+        )
+        self.connect_page_signals(page=page)
+        self._retained_pages.append(page)
+        return page
+
+    def open_plots_page(
             self,
-            api_object: ALL_DEV_TYPES,
             circuit: MultiCircuit,
             mode: DynamicSimulationMode,
             target_workspace: "DynamicEditorWorkspaceWindow | None" = None,
-    ) -> DynamicEventsPage | None:
-        """Resolve a device and open its RMS or EMT events page.
+    ) -> DynamicPlotsPage:
+        """Open or focus the unique circuit-wide plots page for one family.
 
-        :param api_object: Device selected by the caller.
-        :param circuit: Circuit that owns the device and event assets.
-        :param mode: RMS or EMT event family requested by the caller.
+        :param circuit: Circuit whose complete dynamic model universe is shown.
+        :param mode: RMS or EMT plot family.
         :param target_workspace: Preferred workspace receiving a new page.
-        :return: Open events page, or ``None`` for unsupported objects.
+        :return: Open global plots page.
         """
-        entry: DynamicEditorEntry | None = build_dynamic_editor_entry(api_object=api_object, circuit=circuit)
-        if entry is None:
-            return None
+        page_key: tuple[int, DynamicSimulationMode] = (id(circuit), mode)
+        existing_page: DynamicPlotsPage | None = self._plot_pages.get(page_key, None)
+        if existing_page is not None:
+            existing_workspace: DynamicEditorWorkspaceWindow | None = self.workspace_for_page(existing_page)
+            if existing_workspace is None:
+                self.unregister_page(page=existing_page)
+            else:
+                existing_workspace.editor_tabs.setCurrentWidget(existing_page)
+                existing_workspace.showNormal()
+                existing_workspace.raise_()
+                existing_workspace.activateWindow()
+                self.note_page_activated(page=existing_page)
+                return existing_page
         else:
-            return self.open_events_entry(entry=entry, mode=mode, target_workspace=target_workspace)
+            pass
+
+        workspace: DynamicEditorWorkspaceWindow | None = (
+            target_workspace if target_workspace is not None else self.get_last_active_workspace()
+        )
+        if workspace is None:
+            raise RuntimeError("DynamicEditorWorkspaceSession requires an existing workspace")
+        else:
+            pass
+        page: DynamicPlotsPage = self.create_plots_page(circuit=circuit, mode=mode)
+        self._plot_pages[page_key] = page
+        workspace.add_editor_page(page, self.build_page_tab_title(page), activate=True)
+        self._last_active_workspace = workspace
+        return page
+
+    def notify_dynamic_plots_changed(self,
+                                     mode: DynamicSimulationMode,
+                                     source: QtCore.QObject) -> None:
+        """Broadcast a persistent plot-definition change to all GUI projections.
+
+        :param mode: RMS or EMT family whose assets changed.
+        :param source: GUI object that originated the change.
+        :return: None.
+        """
+        self.dynamicPlotsChanged.emit(mode, source)
+
+    def create_comparison_page(
+            self,
+            circuit: MultiCircuit,
+            mode: DynamicSimulationMode,
+    ) -> DynamicModelComparisonPage:
+        """Create one circuit-wide saved-model comparison page.
+
+        :param circuit: Circuit whose authoritative models are compared.
+        :param mode: RMS or EMT model family.
+        :return: Newly created comparison page.
+        """
+        page: DynamicModelComparisonPage = DynamicModelComparisonPage(
+            circuit=circuit,
+            mode=mode,
+        )
+        self.connect_page_signals(page=page)
+        self._retained_pages.append(page)
+        return page
+
+    def open_comparison_page(
+            self,
+            circuit: MultiCircuit,
+            mode: DynamicSimulationMode,
+            target_workspace: "DynamicEditorWorkspaceWindow | None" = None,
+    ) -> DynamicModelComparisonPage:
+        """Open or focus the unique circuit-wide model comparator.
+
+        :param circuit: Circuit whose saved models are compared.
+        :param mode: RMS or EMT model family.
+        :param target_workspace: Preferred workspace receiving a new page.
+        :return: Open comparison page.
+        """
+        page_key: tuple[int, DynamicSimulationMode] = (id(circuit), mode)
+        existing_page: DynamicModelComparisonPage | None = self._comparison_pages.get(page_key, None)
+        if existing_page is not None:
+            existing_workspace: DynamicEditorWorkspaceWindow | None = self.workspace_for_page(existing_page)
+            if existing_workspace is None:
+                self.unregister_page(page=existing_page)
+            else:
+                # Only the explicit comparison-button action may replace the
+                # page snapshot. Switching tabs and editor saves stay isolated.
+                existing_page.refresh_from_saved_model()
+                existing_workspace.editor_tabs.setCurrentWidget(existing_page)
+                existing_workspace.showNormal()
+                existing_workspace.raise_()
+                existing_workspace.activateWindow()
+                return existing_page
+        else:
+            pass
+
+        workspace: DynamicEditorWorkspaceWindow | None = (
+            target_workspace if target_workspace is not None else self.get_last_active_workspace()
+        )
+        if workspace is None:
+            raise RuntimeError("DynamicEditorWorkspaceSession requires an existing workspace")
+        else:
+            pass
+        page: DynamicModelComparisonPage = self.create_comparison_page(circuit=circuit, mode=mode)
+        self._comparison_pages[page_key] = page
+        workspace.add_editor_page(page, self.build_page_tab_title(page), activate=True)
+        self._last_active_workspace = workspace
+        return page
 
     def unregister_page(
             self,
-            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage,
+            page: DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage,
     ) -> None:
         """
         Forget one page in the session registries.
@@ -578,16 +672,26 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
             page.dirtyStateChanged.disconnect(self._on_page_dirty_state_changed)
         except (RuntimeError, TypeError):
             pass
+        if isinstance(page, DynamicEditorTab):
+            try:
+                page.dynamicPlotDefinitionsChanged.disconnect(self.notify_dynamic_plots_changed)
+            except (RuntimeError, TypeError):
+                pass
+        else:
+            pass
         entry = _get_page_entry(page)
         mode = get_page_mode(page)
-        if entry is not None and mode is not None:
-            if isinstance(page, DynamicEventsPage):
-                if page in self._event_pages:
-                    self._event_pages.remove(page)
-                else:
-                    pass
-            else:
-                self._session_pages.pop(entry.session_key(mode), None)
+        if isinstance(page, DynamicPlotsPage):
+            page_key: tuple[int, DynamicSimulationMode] = (id(page.circuit), page.mode)
+            self._plot_pages.pop(page_key, None)
+        elif isinstance(page, DynamicModelComparisonPage):
+            comparison_page_key: tuple[int, DynamicSimulationMode] = (id(page.circuit), page.mode)
+            self._comparison_pages.pop(comparison_page_key, None)
+        elif isinstance(page, DynamicEventsPage):
+            event_page_key: tuple[int, DynamicSimulationMode] = (id(page.circuit), page.mode)
+            self._event_pages.pop(event_page_key, None)
+        elif entry is not None and mode is not None:
+            self._session_pages.pop(entry.session_key(mode), None)
         else:
             pass
 
@@ -617,7 +721,7 @@ class DynamicEditorWorkspaceSession(QtCore.QObject):
 
     def get_pending_tab_drag(
             self,
-    ) -> Tuple[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | None,
+    ) -> Tuple[DynamicBlockEditorGUI | DynamicEditorTab | DynamicEventsPage | DynamicPlotsPage | DynamicModelComparisonPage | None,
                "DynamicEditorWorkspaceWindow | None"]:
         """
         Return the page and workspace remembered for the current drag gesture.

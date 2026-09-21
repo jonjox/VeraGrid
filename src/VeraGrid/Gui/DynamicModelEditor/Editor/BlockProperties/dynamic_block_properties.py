@@ -42,6 +42,7 @@ from VeraGrid.Gui.DynamicModelEditor.Editor.BlockProperties.add_symbol_widget im
     Ui_Form as Ui_AddSymbolWidget,
 )
 from VeraGrid.Gui.toast_widget import ToastManager
+from VeraGrid.Gui.dialog_lifecycle import exec_dialog_safely
 from VeraGridEngine.enumerations import (
     BlockType,
     BlockSymbolCategory,
@@ -80,7 +81,9 @@ from VeraGridEngine.Utils.procedural_logic import ProceduralLogicBase
 from VeraGridEngine.Devices.Dynamic.var_factory import VarFactory
 from VeraGridEngine.Templates.ProceduralLogicCatalog import (
     ProceduralBlockTemplateDescriptor,
-    get_procedural_block_template_descriptors,
+)
+from VeraGrid.Gui.DynamicModelEditor.Editor.DynamicLibrary.dynamic_editor_library import (
+    get_dynamic_library_procedural_descriptors,
 )
 from VeraGridEngine.Templates.template_definition import TemplateDefinition, TemplateProp
 from VeraGridEngine.Utils.Symbolic.block import Block
@@ -856,6 +859,23 @@ def parse_structural_setting_value(prop: TemplateProp, value_text: str) -> objec
         return value_text
     else:
         raise ValueError(f"Unsupported structural setting '{prop.name}'")
+
+
+def disconnect_qobject_from_receiver(sender: QtCore.QObject | None,
+                                     receiver: QtCore.QObject) -> None:
+    """Disconnect all signals from one sender to one receiver when possible.
+
+    :param sender: Qt signal owner.
+    :param receiver: Qt object that owns the receiving slots.
+    :return: None.
+    """
+    if sender is not None:
+        try:
+            sender.disconnect(receiver)
+        except (RuntimeError, TypeError):
+            pass
+    else:
+        pass
 
 
 def split_structural_template_properties(builder: TemplateDefinition) -> tuple[List[TemplateProp], List[TemplateProp]]:
@@ -4950,7 +4970,7 @@ def resolve_block_documentation_url(
         if isinstance(procedural_entry, ProceduralLogicBase):
             relative_path = None
             procedural_descriptor: ProceduralBlockTemplateDescriptor
-            for procedural_descriptor in get_procedural_block_template_descriptors():
+            for procedural_descriptor in get_dynamic_library_procedural_descriptors():
                 if procedural_descriptor.logic_tpe == procedural_entry.logic_tpe:
                     relative_path = procedural_descriptor.documentation_relative_path
                     break
@@ -5277,6 +5297,29 @@ class RetainedModeDraftTableModel(QtCore.QAbstractTableModel):
         return removed, message
 
 
+def build_block_property_header_row(
+        label_item: QtGui.QStandardItem,
+) -> List[QtGui.QStandardItem]:
+    """Build a complete non-editable structural row for the property tree.
+
+    Every header row needs one real item per visible column so the native
+    alternating-row background and row selection extend across the full table.
+
+    :param label_item: First-column item carrying the category or block label.
+    :return: Four-item structural row matching the property-tree schema.
+    """
+    items: List[QtGui.QStandardItem] = list((
+        label_item,
+        QtGui.QStandardItem(),
+        QtGui.QStandardItem(),
+        QtGui.QStandardItem(),
+    ))
+    item: QtGui.QStandardItem
+    for item in items:
+        item.setEditable(False)
+    return items
+
+
 class BlockPropertyTreeModel(QtGui.QStandardItemModel):
     """Present structural and symbol drafts in a single owner-grouped tree.
 
@@ -5335,6 +5378,19 @@ class BlockPropertyTreeModel(QtGui.QStandardItemModel):
         self._structure.dataChanged.connect(self.refresh_values)
         self.rebuild()
 
+    def prepare_to_delete(self) -> None:
+        """Disconnect source models before this tree model is deleted.
+
+        :return: None.
+        """
+        # The tree model subscribes to several sibling source models. Break
+        # those receiver links explicitly so a later GC pass cannot keep this
+        # Python-backed model alive through queued model/view notifications.
+        disconnect_qobject_from_receiver(self._symbols, self)
+        disconnect_qobject_from_receiver(self._parameters, self)
+        disconnect_qobject_from_receiver(self._modes, self)
+        disconnect_qobject_from_receiver(self._structure, self)
+
     def append_source_row(self, parent_item: QtGui.QStandardItem,
                           source_index: QtCore.QModelIndex) -> None:
         """Attach an unpopulated display row referencing an existing draft.
@@ -5373,7 +5429,7 @@ class BlockPropertyTreeModel(QtGui.QStandardItemModel):
             )
             structure_group.setEditable(False)
             structure_group.setData(BlockSymbolCategory.GENERAL, Qt.ItemDataRole.UserRole + 2)
-            self.appendRow(structure_group)
+            self.appendRow(build_block_property_header_row(label_item=structure_group))
             row_index: int
             for row_index in range(self._structure.rowCount()):
                 self.append_source_row(structure_group, self._structure.index(row_index, 0))
@@ -5415,7 +5471,7 @@ class BlockPropertyTreeModel(QtGui.QStandardItemModel):
             category_group: QtGui.QStandardItem = QtGui.QStandardItem(category.value)
             category_group.setEditable(False)
             category_group.setData(category, Qt.ItemDataRole.UserRole + 2)
-            self.appendRow(category_group)
+            self.appendRow(build_block_property_header_row(label_item=category_group))
             owner_index: int
             owner: Block
             for owner_index, owner in enumerate(self._root_block.get_all_blocks()):
@@ -5423,7 +5479,7 @@ class BlockPropertyTreeModel(QtGui.QStandardItemModel):
                 owner_item.setEditable(False)
                 owner_item.setData(owner, Qt.ItemDataRole.UserRole + 1)
                 owner_item.setData(category, Qt.ItemDataRole.UserRole + 2)
-                category_group.appendRow(owner_item)
+                category_group.appendRow(build_block_property_header_row(label_item=owner_item))
                 if category == BlockSymbolCategory.RETAINED_MODES:
                     mode_index: int
                     for mode_index in range(self._modes.rowCount()):
@@ -5763,12 +5819,15 @@ class BlockPropertyValueDelegate(StructuralSettingDelegate):
 class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
     """Property editor content for one Dynamic Model Editor block."""
 
+    _PROPERTY_BASE_COLUMN_WIDTHS: tuple[int, int, int, int] = (170, 100, 230, 60)
+
     # Symbolic UIDs are wider than Qt's 32-bit ``int`` signal type.
     blockApplied = Signal(object)
     structuralRebuildRequested = Signal(object)
     variableRenameRequested = Signal(object)
     outputExportChangesRequested = Signal(object)
     symbolRemovalsRequested = Signal(object)
+    addToPlotRequested = Signal(object, object, object)
     closed = Signal()
 
     __slots__ = (
@@ -5795,6 +5854,7 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         "_dae_editor",
         "_prepared_to_delete",
         "_draft_has_changes",
+        "_property_columns_initialized",
     )
 
     def __init__(self,
@@ -5906,6 +5966,7 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
 
         self._prepared_to_delete: bool = False
         self._draft_has_changes: bool = False
+        self._property_columns_initialized: bool = False
 
         self._configure_add_symbol_dialog()
         self._configure_procedural_menu()
@@ -5928,11 +5989,50 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
             pass
         else:
             self._prepared_to_delete = True
+            self._disconnect_child_signals()
+            self._property_tree_model.prepare_to_delete()
             self._add_symbol_dialog.reject()
+            self._add_symbol_dialog.deleteLater()
+            self._procedural_add_menu.clear()
+            self._procedural_add_menu.deleteLater()
             self._dae_editor.prepare_to_delete()
+            self.ui.dae_editor_layout.removeWidget(self._dae_editor)
+            self._dae_editor.deleteLater()
+            self.ui.property_tree.closePersistentEditor(self.ui.property_tree.currentIndex())
+            self.ui.property_tree.setItemDelegateForColumn(2, None)
             self.ui.property_tree.setModel(None)
+            self.ui.special_settings_table.closePersistentEditor(
+                self.ui.special_settings_table.currentIndex()
+            )
+            self.ui.special_settings_table.setItemDelegateForColumn(1, None)
+            self.ui.special_settings_table.setModel(None)
             self.ui.latex_selection_tree.clear()
+            self.ui.latex_source_preview.clear()
             self.ui.equation_owner_combo.clear()
+            self._add_symbol_ui.new_symbol_owner.clear()
+            self._add_symbol_ui.new_symbol_category.clear()
+            self._add_symbol_ui.new_symbol_kind.clear()
+            self._add_symbol_ui.new_external_reference.clear()
+            self._add_symbol_ui.new_static_reference.clear()
+            self._property_tree_model.deleteLater()
+            self._retained_mode_model.deleteLater()
+            self._symbol_model.deleteLater()
+            self._parameter_model.deleteLater()
+            self._special_structural_model.deleteLater()
+            self._general_structural_model.deleteLater()
+
+    def _disconnect_child_signals(self) -> None:
+        """Disconnect child signals targeting this dialog before deletion.
+
+        :return: None.
+        """
+        # Qt keeps signal/slot links in C++ objects. Each Designer child that
+        # emits into this dialog must drop that receiver before the child tree
+        # is queued for deletion.
+        child: QtCore.QObject
+        for child in self.findChildren(QtCore.QObject):
+            disconnect_qobject_from_receiver(child, self)
+        disconnect_qobject_from_receiver(self._property_tree_model, self)
 
     def set_dark_mode(self) -> None:
         """Apply the dark palette to source editors owned by this dialogue.
@@ -5994,7 +6094,41 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         :return: None.
         """
         QtWidgets.QDialog.showEvent(self, event)
+        if self._property_columns_initialized:
+            pass
+        else:
+            self._fit_initial_property_columns()
+            self._property_columns_initialized = True
         self.filter_properties(self.ui.property_search.text())
+
+    def _fit_initial_property_columns(self) -> None:
+        """Fill the initial property-tree viewport with weighted columns.
+
+        Value keeps its established editing width. Any additional room in the
+        default dialogue is distributed across Name, Type, and Output, after
+        which all sections remain manually resizable.
+
+        :return: None.
+        """
+        header: QtWidgets.QHeaderView = self.ui.property_tree.header()
+        base_widths: tuple[int, int, int, int] = self._PROPERTY_BASE_COLUMN_WIDTHS
+        available_width: int = max(
+            self.ui.property_tree.viewport().width(),
+            sum(base_widths),
+        )
+        extra_width: int = available_width - sum(base_widths)
+        name_extra: int = int(extra_width * 0.4)
+        type_extra: int = int(extra_width * 0.3)
+        output_extra: int = extra_width - name_extra - type_extra
+        initial_widths: List[int] = list((
+            base_widths[0] + name_extra,
+            base_widths[1] + type_extra,
+            base_widths[2],
+            base_widths[3] + output_extra,
+        ))
+        column_index: int
+        for column_index in range(header.count()):
+            header.resizeSection(column_index, initial_widths[column_index])
 
     def _find_initial_equation_buffer_index(self) -> int:
         """
@@ -6043,7 +6177,7 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         property_header: QtWidgets.QHeaderView = self.ui.property_tree.header()
         configure_interactive_table_header(
             property_header,
-            list((170, 100, 230, 60)),
+            list(self._PROPERTY_BASE_COLUMN_WIDTHS),
         )
         self.restore_property_tree()
 
@@ -6152,7 +6286,7 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         """
         current_group_label: str | None = None
         procedural_descriptor: ProceduralBlockTemplateDescriptor
-        for procedural_descriptor in get_procedural_block_template_descriptors():
+        for procedural_descriptor in get_dynamic_library_procedural_descriptors():
             group_label: str = procedural_descriptor.category_path[0]
             if group_label != current_group_label:
                 self._procedural_add_menu.addSection(self.tr(group_label))
@@ -6215,7 +6349,7 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         self.update_new_symbol_category()
         self.update_new_symbol_controls()
         self._add_symbol_dialog.adjustSize()
-        self._add_symbol_dialog.exec()
+        exec_dialog_safely(dialog=self._add_symbol_dialog)
 
     @QtCore.Slot()
     def restore_property_tree(self) -> None:
@@ -7717,8 +7851,27 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
         )
         menu.addSeparator()
 
+        add_to_plot_action: QtGui.QAction | None
         rename_action: QtGui.QAction | None
         delete_action: QtGui.QAction | None
+        if source_row is not None:
+            selected_variable: Var | None = source_row.get_variable()
+            add_to_plot_action = gf.add_menu_entry(
+                menu=menu,
+                text=self.tr("Add to plot..."),
+                icon_path=":/Icons/icons/rms_plots.png",
+            )
+            add_to_plot_action.setEnabled(selected_variable is not None)
+            if selected_variable is None:
+                add_to_plot_action.setToolTip(
+                    self.tr("Apply the new symbol before adding it to a plot")
+                )
+            else:
+                pass
+            menu.addSeparator()
+        else:
+            add_to_plot_action = None
+
         if source_row is not None or source_mode is not None:
             rename_action = gf.add_menu_entry(
                 menu=menu,
@@ -7743,6 +7896,17 @@ class DynamicBlockPropertiesDialog(QtWidgets.QDialog):
             self.show_add_symbol_dialog(BlockSymbolCategory.PARAMETERS, owner)
         elif selected_action is add_retained_mode_action:
             self.show_add_symbol_dialog(BlockSymbolCategory.RETAINED_MODES, owner)
+        elif add_to_plot_action is not None and selected_action is add_to_plot_action:
+            selected_variable = source_row.get_variable() if source_row is not None else None
+            if selected_variable is not None and source_row is not None:
+                global_position: QtCore.QPoint = table.viewport().mapToGlobal(position)
+                self.addToPlotRequested.emit(
+                    selected_variable,
+                    source_row.get_kind(),
+                    global_position,
+                )
+            else:
+                pass
         elif rename_action is not None and selected_action is rename_action:
             self.rename_property_symbol()
         elif delete_action is not None and selected_action is delete_action:
