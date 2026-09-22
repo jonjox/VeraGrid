@@ -39,7 +39,7 @@
     <message>
         <location filename="../AboutDialogue/about_gui.ui" line="160"/>
         <source>Libraries</source>
-        <translation>Liburutegiak</translation>
+        <translation>Liburutegiakk</translation>
     </message>
     <message>
         <location filename="../AboutDialogue/about_gui.ui" line="166"/>
