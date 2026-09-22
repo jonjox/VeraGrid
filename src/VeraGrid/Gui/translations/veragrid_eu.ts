@@ -320,7 +320,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
     <message>
         <location filename="../AiAgent/ai_chat_gui.ui" line="226"/>
         <source>Checked automatically when the chat opens.</source>
-        <translation>Egaituta dago otomatikoki bate-hazta irekitzen denean.</translation>
+        <translation>Automatikoki egiaztatzen da txata irekitzen denean.</translation>
     </message>
     <message>
         <source>Local AI</source>
@@ -524,7 +524,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
     </message>
     <message>
         <source>Checking automatically when the chat opens.</source>
-        <translation>Egasteko da otomatikoki bate-hazta irekitzen denean.</translation>
+        <translation>Automatikoki egiaztatzen da txata irekitzen denean.</translation>
     </message>
     <message>
         <source>Could not refresh models: {error_message}</source>
@@ -564,11 +564,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
     </message>
     <message>
         <source>Ollama reports installed models automatically</source>
-        <translation>Ollama-k instalatu modelak otomatikoki ziurtatzen ditu</translation>
+        <translation>Ollama-k instalatutako ereduak automatikoki ziurtatzen ditu</translation>
     </message>
     <message>
         <source>Ollama will be detected and checked automatically when the chat opens.</source>
-        <translation>Ollama-k itzultuko eta egialdi utziko otomatikoki bate-hazta irekitzen denean.</translation>
+        <translation>Ollama automatikoki detektatu eta egiaztatuko dute txata irekitzen denean.</translation>
     </message>
     <message>
         <source>Pick or type an Ollama model</source>
@@ -620,7 +620,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
     </message>
     <message>
         <source>VeraGrid checks Ollama automatically and uses the model reported by the local server.</source>
-        <translation>VeraGrid-ek Ollama-k egialdi utzi eta lokal server-ek ziurtatutako modeloa erabiltzen du otomatikoki.</translation>
+        <translation>VeraGridek automatikoki egiaztatzen du Ollama eta zerbitzari lokalak jakinarazitako eredua erabiltzen du.</translation>
     </message>
     <message>
         <source>http://localhost:11434/v1</source>
@@ -800,7 +800,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
     </message>
     <message>
         <source>Template issue: static parameters require api_obj_mapping. An independently editable parameter should be in event_dict. This refactor does not migrate templates automatically.</source>
-        <translation>Template-ko problema: parametro statikoak api_obj_mapping behar dute. Parametro independentean itxiko da event_dict-ean. Refactorizazio honek templateak automatikoki migratatzen ez du.</translation>
+        <translation>Template-ko problema: parametro estatikoak api_obj_mapping behar dute. Parametro independenteki editagarri bat event_dict-en egon behar du. "Refactor" honek ez ditu txantiloiak automatikoki migratzen.</translation>
     </message>
     <message>
         <source>Type</source>
@@ -6565,7 +6565,7 @@ Please correct the data and try again.</translation>
     </message>
     <message>
         <source>Lower</source>
-        <translation>Txikiareena</translation>
+        <translation>Txikiagotu</translation>
     </message>
     <message>
         <source>Make the grid simulation-ready and rerun the dashboard so sigma margin can join the report.</source>
@@ -8340,15 +8340,15 @@ Denbora serieko potentzia-fluxuaren emaitzak:</translation>
     </message>
     <message>
         <source>	app.session.power_flow_ts.currents:	 Branches currents results matrix (row: time, col: branch)</source>
-        <translation type="vanished">	app.session.power_flow_ts.currents: Adarrak korronteen emaitzen matrizea (erranka: denbora, col: adarra)</translation>
+        <translation type="vanished">	app.session.power_flow_ts.currents: Adarren korronteen emaitzen matrizea (lerroa: denbora, zutabea: adarra)</translation>
     </message>
     <message>
         <source>	app.session.power_flow_ts.loadings:	 Branches loadings results matrix (row: time, col: branch)</source>
-        <translation type="vanished">	app.session.power_flow_ts.loadings: Adarrak kargatzen emaitzen matrizea (erranka: denbora, col: adarra)</translation>
+        <translation type="vanished">	app.session.power_flow_ts.loadings: Adarren karga mailaren emaitzen matrizea (erranka: denbora, col: adarra)</translation>
     </message>
     <message>
         <source>	app.session.power_flow_ts.losses:	 Branches losses results matrix (row: time, col: branch)</source>
-        <translation type="vanished">	app.session.power_flow_ts.loss: adar-galeren emaitzen matrizea (erranka: denbora, col: adarra)</translation>
+        <translation type="vanished">	app.session.power_flow_ts.loss: Adar-galeren emaitzen matrizea (erranka: denbora, col: adarra)</translation>
     </message>
     <message>
         <source>
@@ -10360,7 +10360,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     </message>
     <message>
         <source>Some operations are still stopping. Close again after they finish.</source>
-        <translation>Jelantza batzuk ordezkarizko daude. Amaitzera gero berriro itxoteko.</translation>
+        <translation>Operazio batzuk gelditzen ari dira. Amaitu ondoren, itxi berriro.</translation>
     </message>
 </context>
 <context>
@@ -10615,7 +10615,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     </message>
     <message>
         <source>Branches</source>
-        <translation>Zuzponak</translation>
+        <translation>Adarrak</translation>
     </message>
     <message>
         <source>Bus</source>
@@ -12227,51 +12227,51 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     </message>
     <message>
         <source>Time series Contingency flow report (Branches)</source>
-        <translation>Egutegiko kontingentzia siriak raporea (Siriak)</translation>
+        <translation>Time series Contingency flow report (Branches)</translation>
     </message>
     <message>
         <source>Time series base flow report</source>
-        <translation>Egutegiko oinarrizko siriak raporea</translation>
+        <translation>Time series base flow report</translation>
     </message>
     <message>
         <source>Time series branch monitoring logic report</source>
-        <translation>Egutegiko siriak itxurtiak bugatseko logika raporea</translation>
+        <translation>Time series branch monitoring logic report</translation>
     </message>
     <message>
         <source>Time series contingency Branches report</source>
-        <translation>Egutegiko kontingentzia siriak raporea</translation>
+        <translation>Time series contingency Branches report</translation>
     </message>
     <message>
         <source>Time series contingency flow report</source>
-        <translation>Egutegiko kontingentzia siriak raporea</translation>
+        <translation>Time series contingency flow report</translation>
     </message>
     <message>
         <source>Time series contingency flow report. (Generation)</source>
-        <translation>Egutegiko kontingentzia siriak raporea. (Genero)</translation>
+        <translation>Time series contingency flow report. (Genero)</translation>
     </message>
     <message>
         <source>Time series contingency flow report. (Hvdc)</source>
-        <translation>Egutegiko kontingentzia siriak raporea. (Hvdc)</translation>
+        <translation>Time series contingency flow report. (Hvdc)</translation>
     </message>
     <message>
         <source>Time series critical Branches report</source>
-        <translation>Egutegiko siriak kritikoak raporea</translation>
+        <translation>Time series critical Branches report</translation>
     </message>
     <message>
         <source>Time series generation delta power report</source>
-        <translation>Egutegiko genero delta potentzia raporea</translation>
+        <translation>Time series generation delta power report</translation>
     </message>
     <message>
         <source>Time series generation power report</source>
-        <translation>Egutegiko genero potentzia raporea</translation>
+        <translation>Time series generation power report</translation>
     </message>
     <message>
         <source>Time series sensitivity to the exchange report</source>
-        <translation>Egutegiko elkarbestearako sensitibitatea raporea</translation>
+        <translation>Time series sensitivity to the exchange report</translation>
     </message>
     <message>
         <source>Time series worst sensitivity to the exchange report (N-1)</source>
-        <translation>Egutegiko elkarbestearako urratsko sensitibitatea raporea (N-1)</translation>
+        <translation>Time series worst sensitivity to the exchange report (N-1)</translation>
     </message>
     <message>
         <source>Topology Processor</source>
@@ -15375,12 +15375,12 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="11772"/>
         <source>Correct buses location</source>
-        <translation>Autobusen kokapen zuzena</translation>
+        <translation>Korapiloen kokapen zuzendu</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="11775"/>
         <source>Set selected buses location closer to their neighbours</source>
-        <translation>Ezarri hautatutako autobusen kokapena auzokoengandik gertuago</translation>
+        <translation>Ezarri hautatutako korapiloen kokapena gertuago ingurukoekiko</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="11787"/>
@@ -15410,7 +15410,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="11820"/>
         <source>Import circuit</source>
-        <translation>Inportazio zirkuitua</translation>
+        <translation>Zirkuitua inportatu</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="11823"/>
@@ -15584,7 +15584,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="12093"/>
         <source>Set schematic (x,y) from (lat,lon)</source>
-        <translation>Ezarri eskema (x,y) tik (lat,lon)</translation>
+        <translation>Ezarri (x,y) eskemak (lat,lon)-etik</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="12105"/>
@@ -15906,7 +15906,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="12663"/>
         <source>Color buses by...</source>
-        <translation>Koloreztatu autobusak...</translation>
+        <translation>Koloreztatu korapiloak...</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="12675"/>
@@ -15916,7 +15916,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="12690"/>
         <source>Select buses by...</source>
-        <translation>Aukeratu autobusak...</translation>
+        <translation>Aukeratu korapiloak...</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="12717"/>
@@ -15975,7 +15975,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="12801"/>
         <source>Clear highlights</source>
-        <translation>Argi nabarmenenak</translation>
+        <translation>Nabarmenenak kendu</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="12816"/>
@@ -16165,12 +16165,12 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="13183"/>
         <source>Repair diagram</source>
-        <translation>Konponketa-diagrama</translation>
+        <translation>Diagrama konpondu</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="13195"/>
         <source>Clear cache</source>
-        <translation>Cache-a garbiaztu</translation>
+        <translation>Cache-a garbitu</translation>
     </message>
 </context>
 <context>
