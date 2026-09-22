@@ -15410,7 +15410,7 @@ Ekarri edo sortu ekarri-erakunde bat!</translation>
     <message>
         <location filename="../Main/MainWindow.ui" line="11820"/>
         <source>Import circuit</source>
-        <translation>Inportazio zirkuitua</translation>
+        <translation>Zirkuitua inportatu</translation>
     </message>
     <message>
         <location filename="../Main/MainWindow.ui" line="11823"/>
